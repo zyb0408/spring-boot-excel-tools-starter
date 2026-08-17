@@ -1,0 +1,4 @@
+# Spring Boot 3.x 自动配置注册文件
+# 该文件会被 Spring Boot 自动扫描，将 ExcelExportAutoConfiguration 注册为自动配置类，
+# 实现「引入 jar 包即用、无需额外配置」的 Starter 效果。
+io.exceltools.config.ExcelExportAutoConfiguration

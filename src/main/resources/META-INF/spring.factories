@@ -1,0 +1,5 @@
+# Spring Boot 2.7.x 兼容注册文件（旧版自动配置机制）
+# 若使用方工程为 Spring Boot 2.7.x，Spring Boot 会读取本文件完成自动配置注册；
+# Spring Boot 3.x 则优先读取 META-INF/spring/ 下的 AutoConfiguration.imports。
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+io.exceltools.config.ExcelExportAutoConfiguration

@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      Spring Boot Starter 父工程：
+      统一管理 Spring Boot 及各依赖版本，避免版本冲突。
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.5</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>io.exceltools</groupId>
+    <artifactId>spring-boot-excel-tools-starter</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <name>spring-boot-excel-tools-starter</name>
+    <description>基于 Apache POI 的 Spring Boot Starter，统一封装 Excel 导出能力（注解驱动、多 Sheet、大数据量分批导出、自定义样式）</description>
+
+    <properties>
+        <!-- 编译目标：Java 17（Spring Boot 3.x 最低要求），兼容 Java 17+ 运行时 -->
+        <java.version>17</java.version>
+        <!-- Apache POI 版本，用于读写 Excel（xlsx） -->
+        <poi.version>5.2.5</poi.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    </properties>
+
+    <dependencies>
+        <!--
+          Spring Boot 自动配置核心依赖：
+          提供 @AutoConfiguration、@ConditionalOnXxx、@EnableConfigurationProperties 等能力，
+          是 Starter 引入即用的关键。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+
+        <!--
+          Spring Boot 配置元数据处理器（optional）：
+          编译期生成 spring-configuration-metadata.json，
+          让 application.yml 中的 excel.export.* 配置项具备 IDE 提示能力。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+          Apache POI（ooxml）：
+          Excel xlsx 读写核心依赖，包含 XSSFWorkbook 与 SXSSFWorkbook（流式写，用于大数据量导出）。
+        -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+
+        <!--
+          Jakarta Servlet API（provided）：
+          仅用于提供 HttpServletResponse 便捷导出方法；编译期使用、运行期由使用方 Web 容器提供。
+          注意：若使用方工程未引入 spring-boot-starter-web，则 Web 便捷导出方法不会被自动注册，
+          核心导出能力不受影响（核心 API 不依赖 Servlet）。
+        -->
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <version>6.0.0</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- JUnit 5 单元测试依赖（test 作用域），验证导出功能正确性 -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+              Maven 源码插件：
+              打包时额外生成 sources jar，方便团队在 IDE 中查看本组件源码。
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
