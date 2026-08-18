@@ -3,6 +3,8 @@ package io.exceltools.config;
 import io.exceltools.service.ExcelExportService;
 import io.exceltools.service.impl.DefaultExcelExportService;
 import io.exceltools.web.ExcelWebExporter;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -34,8 +36,10 @@ import org.springframework.context.annotation.Bean;
  * @author exceltools
  * @since 1.0.0
  */
+// FIX:修复的 AutoConfiguration 缺少条件注解问题 - 添加 @ConditionalOnClass 确保 POI 依赖存在时才自动配置
 @AutoConfiguration
 @EnableConfigurationProperties(ExcelExportProperties.class)
+@ConditionalOnClass({XSSFWorkbook.class, SXSSFWorkbook.class})
 public class ExcelExportAutoConfiguration {
 
     /**

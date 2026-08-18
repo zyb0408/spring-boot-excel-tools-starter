@@ -555,6 +555,8 @@ public class DefaultExcelExportService implements ExcelExportService {
         }
         Row row = sheet.createRow(rowIndex);
         row.setHeightInPoints(18);
+        // FIX:修复的 sampledRows 计数器位置错误问题 - 在写入数据行前递增计数器，而非每个单元格
+        ctx.incrementSampledRows();
         for (int i = 0; i < columns.size(); i++) {
             ColumnMeta column = columns.get(i);
             Object value = column.read(rowData);
@@ -787,6 +789,7 @@ public class DefaultExcelExportService implements ExcelExportService {
      * @param cfg      合并后的导出配置
      * @return 最终文件路径
      */
+    // FIX:修复的路径遍历检查存在安全漏洞问题 - 使用更严格的路径校验，确保最终路径在工作目录内
     private String resolvePath(String filePath, ExcelExportConfig cfg) {
         String path = filePath;
         if (path == null || path.trim().isEmpty()) {
@@ -805,12 +808,27 @@ public class DefaultExcelExportService implements ExcelExportService {
         // 文件名无扩展名时追加 .xlsx
         if (!name.contains(".")) {
             path = path + ".xlsx";
+            // 重新规范化带扩展名的路径
+            normalized = java.nio.file.Paths.get(path).normalize();
+            name = normalized.getFileName() != null ? normalized.getFileName().toString() : path;
         }
 
         // 路径安全校验：规范化后的路径不应包含 ".." 路径遍历片段
         String normalizedStr = normalized.toString();
         if (normalizedStr.contains("..")) {
             throw new IllegalArgumentException("非法文件路径：包含路径遍历片段 " + filePath);
+        }
+
+        // FIX:修复的路径遍历检查存在安全漏洞问题 - 额外检查绝对路径是否尝试访问父目录
+        try {
+            java.nio.file.Path workDir = java.nio.file.Paths.get("").toAbsolutePath().normalize();
+            java.nio.file.Path resolvedPath = workDir.resolve(normalized);
+            if (!resolvedPath.normalize().startsWith(workDir)) {
+                throw new IllegalArgumentException("非法文件路径：试图访问工作目录之外的路径 " + filePath);
+            }
+        } catch (Exception e) {
+            // 如果路径解析失败，也视为非法路径
+            throw new IllegalArgumentException("非法文件路径：" + filePath, e);
         }
 
         return path;
@@ -1040,6 +1058,12 @@ public class DefaultExcelExportService implements ExcelExportService {
                     updateWidth(columnIndex, text);
                 }
             }
+        }
+
+        /**
+         * FIX:修复的 sampledRows 计数器位置错误问题 - 新增方法用于在 writeDataRow 中递增采样行数
+         */
+        void incrementSampledRows() {
             sampledRows++;
         }
 
