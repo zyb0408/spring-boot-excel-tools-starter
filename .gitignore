@@ -1,4 +1,24 @@
-
-.DS_Store
-.workbuddy/
-target
+```
+# Compiled and build artifacts
+*.class
+*.o
+*.obj
+*.out
+# Dependencies
+target/
+.m2/
+.gradle/
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+# Environment
+.env
+.env.local
+*.env.*
+# Editors
+.vscode/
+.idea/
+__pycache__/
+*.pyc
+```
