@@ -298,15 +298,22 @@ public class DefaultExcelExportService implements ExcelExportService {
     @Override
     public void exportLarge(List<?> data, OutputStream out, ExcelExportConfig config) throws IOException {
         ExcelExportConfig cfg = merge(config);
-        SXSSFWorkbook workbook = new SXSSFWorkbook(cfg.getWindowRows());
+        SXSSFWorkbook workbook = null;
         try {
+            workbook = new SXSSFWorkbook(cfg.getWindowRows());
             Sheet sheet = workbook.createSheet(cfg.getSheetName());
             writeSheetContent(workbook, sheet, data, cfg);
             workbook.write(out);
         } finally {
-            // 释放 SXSSF 临时文件资源
-            workbook.dispose();
-            workbook.close();
+            if (workbook != null) {
+                // 释放 SXSSF 临时文件资源
+                workbook.dispose();
+                try {
+                    workbook.close();
+                } catch (IOException ignore) {
+                    // ignore
+                }
+            }
         }
     }
 
@@ -356,14 +363,21 @@ public class DefaultExcelExportService implements ExcelExportService {
     public void exportLargeByBatch(BatchDataProvider<?> provider, OutputStream out, ExcelExportConfig config)
             throws IOException {
         ExcelExportConfig cfg = merge(config);
-        SXSSFWorkbook workbook = new SXSSFWorkbook(cfg.getWindowRows());
+        SXSSFWorkbook workbook = null;
         try {
+            workbook = new SXSSFWorkbook(cfg.getWindowRows());
             Sheet sheet = workbook.createSheet(cfg.getSheetName());
             writeSheetByBatch(workbook, sheet, provider, cfg);
             workbook.write(out);
         } finally {
-            workbook.dispose();
-            workbook.close();
+            if (workbook != null) {
+                workbook.dispose();
+                try {
+                    workbook.close();
+                } catch (IOException ignore) {
+                    // ignore
+                }
+            }
         }
     }
 
@@ -434,29 +448,41 @@ public class DefaultExcelExportService implements ExcelExportService {
         int batchSize = cfg.getBatchSize();
         // 列元数据：优先使用配置显式声明的数据类；否则等首批数据到达后推断
         List<ColumnMeta> columns = resolveColumns(cfg.getDataClass());
-        boolean columnsReady = !columns.isEmpty();
         SheetWriteContext ctx = new SheetWriteContext(workbook, columns, cfg);
 
         int rowIndex = 0;
         int offset = 0;
+        boolean headerWritten = false;
         while (true) {
             List<?> batch = provider.fetch(offset, batchSize);
             if (batch == null || batch.isEmpty()) {
                 break;
             }
             // 首批数据到达后推断列结构并写入标题/表头
-            if (!columnsReady) {
-                Class<?> dataClass = resolveDataClass(batch, cfg);
-                columns = resolveColumns(dataClass);
-                ctx = new SheetWriteContext(workbook, columns, cfg);
+            if (!headerWritten) {
+                if (columns.isEmpty()) {
+                    Class<?> dataClass = resolveDataClass(batch, cfg);
+                    columns = resolveColumns(dataClass);
+                    ctx = new SheetWriteContext(workbook, columns, cfg);
+                }
                 rowIndex = writeTitleRow(sheet, columns, cfg, ctx, rowIndex);
                 rowIndex = writeHeaderRow(sheet, columns, ctx, rowIndex);
-                columnsReady = !columns.isEmpty();
+                headerWritten = true;
             }
             for (Object rowData : batch) {
                 writeDataRow(sheet, columns, rowData, rowIndex++, ctx);
             }
             offset += batch.size();
+        }
+
+        // 空数据场景：无任何批次数据时仍需确保表头/标题写入
+        if (!headerWritten) {
+            if (columns.isEmpty()) {
+                columns = resolveColumns(cfg.getDataClass());
+                ctx = new SheetWriteContext(workbook, columns, cfg);
+            }
+            rowIndex = writeTitleRow(sheet, columns, cfg, ctx, rowIndex);
+            rowIndex = writeHeaderRow(sheet, columns, ctx, rowIndex);
         }
 
         finalizeSheet(sheet, columns, cfg, ctx, rowIndex);
@@ -554,7 +580,9 @@ public class DefaultExcelExportService implements ExcelExportService {
         // 列宽：优先使用注解指定宽度，否则使用自动计算值
         for (int i = 0; i < columns.size(); i++) {
             int width = columns.get(i).width() > 0 ? columns.get(i).width() : ctx.widths[i];
-            sheet.setColumnWidth(i, Math.min(width + 2, 255) * 256);
+            // 防止负列宽值；Excel 单列最大 255 字符
+            int safeWidth = Math.max(0, Math.min(width + 2, 255));
+            sheet.setColumnWidth(i, safeWidth * 256);
         }
         // 冻结表头：有标题行时冻结 2 行（标题 + 表头），否则冻结 1 行（表头）
         if (cfg.getFreezeHeader() && rowIndex > 1) {
@@ -656,7 +684,12 @@ public class DefaultExcelExportService implements ExcelExportService {
         }
 
         // 按列顺序升序排列（稳定排序：相同 order 保持声明顺序）
-        metas.sort(Comparator.comparingInt(ColumnMeta::order));
+        // 为每个列元数据标记原始索引，确保相同 order 的字段按声明顺序排列
+        for (int i = 0; i < metas.size(); i++) {
+            metas.get(i).setIndex(i);
+        }
+        metas.sort(Comparator.comparingInt(ColumnMeta::order)
+                .thenComparingInt(ColumnMeta::index));
         return metas;
     }
 
@@ -678,8 +711,8 @@ public class DefaultExcelExportService implements ExcelExportService {
             builder.title(config.getTitle() != null ? config.getTitle() : properties.getDefaultTitle());
             builder.freezeHeader(config.getFreezeHeader() != null ? config.getFreezeHeader() : properties.isFreezeHeader());
             builder.autoColumnWidth(config.getAutoColumnWidth() != null ? config.getAutoColumnWidth() : properties.isAutoColumnWidth());
-            builder.batchSize(config.getBatchSize() != null ? config.getBatchSize() : properties.getBatchSize());
-            builder.windowRows(config.getWindowRows() != null ? config.getWindowRows() : properties.getWindowRows());
+            builder.batchSize(validateBatchSize(config.getBatchSize() != null ? config.getBatchSize() : properties.getBatchSize()));
+            builder.windowRows(validateWindowRows(config.getWindowRows() != null ? config.getWindowRows() : properties.getWindowRows()));
             builder.booleanTrueText(config.getBooleanTrueText() != null ? config.getBooleanTrueText() : properties.getBooleanTrueText());
             builder.booleanFalseText(config.getBooleanFalseText() != null ? config.getBooleanFalseText() : properties.getBooleanFalseText());
             builder.dataClass(config.getDataClass());
@@ -690,8 +723,8 @@ public class DefaultExcelExportService implements ExcelExportService {
             builder.title(properties.getDefaultTitle());
             builder.freezeHeader(properties.isFreezeHeader());
             builder.autoColumnWidth(properties.isAutoColumnWidth());
-            builder.batchSize(properties.getBatchSize());
-            builder.windowRows(properties.getWindowRows());
+            builder.batchSize(validateBatchSize(properties.getBatchSize()));
+            builder.windowRows(validateWindowRows(properties.getWindowRows()));
             builder.booleanTrueText(properties.getBooleanTrueText());
             builder.booleanFalseText(properties.getBooleanFalseText());
         }
@@ -725,7 +758,30 @@ public class DefaultExcelExportService implements ExcelExportService {
     }
 
     /**
+     * 校验并修正 batchSize 参数（必须为正整数）。
+     *
+     * @param batchSize 原始值
+     * @return 修正后的值（最小为 1）
+     */
+    private static int validateBatchSize(int batchSize) {
+        return batchSize > 0 ? batchSize : 10000;
+    }
+
+    /**
+     * 校验并修正 windowRows 参数（必须为正整数）。
+     *
+     * @param windowRows 原始值
+     * @return 修正后的值（最小为 1）
+     */
+    private static int validateWindowRows(int windowRows) {
+        return windowRows > 0 ? windowRows : 100;
+    }
+
+    /**
      * 解析输出文件路径：目录自动拼接默认文件名，无扩展名自动追加 .xlsx。
+     *
+     * <p>路径安全：通过 {@link java.nio.file.Path#normalize()} 消除 {@code ..} 等路径遍历片段，
+     * 防止攻击者通过构造路径写入工作目录之外的位置。</p>
      *
      * @param filePath 调用方传入的路径（可为 null）
      * @param cfg      合并后的导出配置
@@ -736,15 +792,27 @@ public class DefaultExcelExportService implements ExcelExportService {
         if (path == null || path.trim().isEmpty()) {
             path = cfg.getFileName();
         }
+
         // 以分隔符结尾视为目录，拼接默认文件名
         if (path.endsWith("/") || path.endsWith("\\")) {
             path = path + cfg.getFileName();
         }
-        // 文件名部分无扩展名时追加 .xlsx
-        String name = path.substring(path.lastIndexOf('/') + 1);
+
+        // 跨平台路径解析：使用 java.nio.file.Path 正确提取文件名
+        java.nio.file.Path normalized = java.nio.file.Paths.get(path).normalize();
+        String name = normalized.getFileName() != null ? normalized.getFileName().toString() : path;
+
+        // 文件名无扩展名时追加 .xlsx
         if (!name.contains(".")) {
             path = path + ".xlsx";
         }
+
+        // 路径安全校验：规范化后的路径不应包含 ".." 路径遍历片段
+        String normalizedStr = normalized.toString();
+        if (normalizedStr.contains("..")) {
+            throw new IllegalArgumentException("非法文件路径：包含路径遍历片段 " + filePath);
+        }
+
         return path;
     }
 

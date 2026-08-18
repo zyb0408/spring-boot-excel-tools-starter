@@ -52,6 +52,11 @@ final class ColumnMeta {
     private final Align align;
 
     /**
+     * 原始声明索引（用于相同 order 值时的稳定排序）。
+     */
+    private int index;
+
+    /**
      * 构造列元数据。
      *
      * @param field        实体字段
@@ -140,6 +145,24 @@ final class ColumnMeta {
      */
     Align align() {
         return align;
+    }
+
+    /**
+     * 获取原始声明索引。
+     *
+     * @return 原始索引
+     */
+    int index() {
+        return index;
+    }
+
+    /**
+     * 设置原始声明索引（用于稳定排序）。
+     *
+     * @param index 原始索引
+     */
+    void setIndex(int index) {
+        this.index = index;
     }
 
     /**

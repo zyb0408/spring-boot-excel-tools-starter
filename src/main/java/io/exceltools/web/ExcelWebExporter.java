@@ -129,7 +129,15 @@ public class ExcelWebExporter {
         response.setContentType(XLSX_CONTENT_TYPE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         // RFC 5987 格式：避免中文文件名乱码，兼容现代浏览器
-        String encoded = URLEncoder.encode(name, StandardCharsets.UTF_8).replace("+", "%20");
+        // URLEncoder.encode(String, Charset) 在 Java 17 中抛出受检异常，
+        // 由于 StandardCharsets.UTF_8 为 JDK 内置常量，此处异常永远不会发生
+        String encoded;
+        try {
+            encoded = URLEncoder.encode(name, StandardCharsets.UTF_8).replace("+", "%20");
+        } catch (java.io.UnsupportedEncodingException e) {
+            // UTF-8 为 JDK 必备字符集，此分支永不触发
+            encoded = name;
+        }
         response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encoded);
     }
 }
